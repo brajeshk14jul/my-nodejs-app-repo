@@ -1,15 +1,19 @@
-# Use official Node.js LTS image as base
 FROM node:20-alpine
 
-# Copy package files first (for layer caching)
-COPY package.json ./app/
-COPy src ./app/
-
-# Set working directory inside the container
+# Set working directory first
 WORKDIR /app
 
-# Install dependencies
+# Copy and install dependencies
+COPY package*.json ./
 RUN npm install
 
+# Copy source code
+COPY src ./src
+
+# Copy test code
+COPY tests ./tests
+
+EXPOSE 3000
+
 # Start the application
-CMD ["node", "app.js"]
+CMD ["node", "src/app.js"]
