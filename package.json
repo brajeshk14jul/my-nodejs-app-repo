@@ -1,0 +1,16 @@
+{
+  "name": "my-nodejs-app",
+  "version": "1.0.0",
+  "description": "My First Node.js Express app",
+  "main": "app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
