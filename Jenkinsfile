@@ -11,33 +11,24 @@ pipeline {
 
     stages {
 
-        // ─────────────────────────────────────────
-        // STAGE 1: Checkout
-        // ─────────────────────────────────────────
         stage('Checkout') {
             steps {
                 echo '📥 Checking out source code from GitHub...'
                 git(
-                    url: 'https://github.com/your-username/my-nodejs-app-repo.git',
+                    url: 'https://github.com/brajeshk14jul/my-nodejs-app-repo.git',
                     branch: 'main',
-                    credentialsId: 'github-credentials'  // ← ID you set in Jenkins
+                    credentialsId: 'github-credentials'
                 )
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 2: Install Dependencies
-        // ─────────────────────────────────────────
         stage('Install Dependencies') {
             steps {
                 echo '📦 Installing Node.js dependencies...'
-                sh 'npm install'
+                sh 'npm ci'
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 3: Test
-        // ─────────────────────────────────────────
         stage('Test') {
             steps {
                 echo '🧪 Running Jest tests...'
@@ -53,9 +44,6 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 4: Build Docker Image
-        // ─────────────────────────────────────────
         stage('Build Docker Image') {
             steps {
                 echo "🐳 Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
@@ -74,43 +62,13 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 5: Push to Docker Registry (Optional)
-        // ─────────────────────────────────────────
-        stage('Push to Registry') {
-            when {
-                expression { return env.DOCKER_REGISTRY?.trim() }
-            }
-            steps {
-                echo "🚀 Pushing ${IMAGE_NAME}:${IMAGE_TAG} to ${DOCKER_REGISTRY}..."
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker tag ${IMAGE_NAME}:latest    ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
-                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
-                    """
-                }
-            }
-        }
-
-        // ─────────────────────────────────────────
-        // STAGE 6: Deploy to Docker Container
-        // ─────────────────────────────────────────
         stage('Deploy') {
             steps {
                 echo '🚢 Deploying application to Docker container...'
                 sh """
-                    # Stop and remove existing container if running
                     docker stop ${CONTAINER_NAME} || true
                     docker rm   ${CONTAINER_NAME} || true
 
-                    # Run new container with restart policy
                     docker run -d \
                         --name ${CONTAINER_NAME} \
                         -p ${HOST_PORT}:${APP_PORT} \
@@ -124,7 +82,7 @@ pipeline {
             }
             post {
                 failure {
-                    echo '❌ Deployment failed! Rolling back...'
+                    echo '❌ Deployment failed!'
                     sh """
                         docker stop ${CONTAINER_NAME} || true
                         docker rm   ${CONTAINER_NAME} || true
@@ -133,7 +91,58 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 7: Health Check
-        // ─────────────────────────────────────────
+        stage('Health Check') {
+            steps {
+                echo '🏥 Running health check...'
+                sh """
+                    sleep 5
+                    curl -f http://localhost:${HOST_PORT}/health \
+                        && echo "✅ Health check passed!" \
+                        || (echo "❌ Health check failed!" && exit 1)
+                """
+            }
+        }
+
+        stage('Verify API') {
+            steps {
+                echo '🔍 Verifying API routes...'
+                sh """
+                    curl -f http://localhost:${HOST_PORT}/ \
+                        && echo "✅ GET / is UP" \
+                        || echo "⚠️  GET / check failed"
+
+                    curl -f http://localhost:${HOST_PORT}/api/users \
+                        && echo "✅ GET /api/users is UP" \
+                        || echo "⚠️  GET /api/users check failed"
+                """
+            }
+        }
     }
+
+    post {
+        success {
+            echo """
+            ╔══════════════════════════════════════╗
+            ║       ✅ PIPELINE SUCCESS             ║
+            ╠══════════════════════════════════════╣
+            ║  Image    : ${IMAGE_NAME}:${IMAGE_TAG}
+            ║  Container: ${CONTAINER_NAME}
+            ║  App URL  : http://localhost:${HOST_PORT}
+            ║  Users API: http://localhost:${HOST_PORT}/api/users
+            ║  Health   : http://localhost:${HOST_PORT}/health
+            ╚══════════════════════════════════════╝
+            """
+        }
+        failure {
+            echo '❌ Pipeline FAILED! Check the logs above.'
+            sh """
+                docker stop ${CONTAINER_NAME} || true
+                docker rm   ${CONTAINER_NAME} || true
+            """
+        }
+        always {
+            echo '🧹 Cleaning up dangling Docker images...'
+            sh 'docker image prune -f || true'
+        }
+    }
+}
