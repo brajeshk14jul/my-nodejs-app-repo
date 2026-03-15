@@ -7,7 +7,6 @@ pipeline {
         CONTAINER_NAME  = 'my-nodejs-app-container'
         APP_PORT        = '3000'
         HOST_PORT       = '3000'
-        DOCKER_REGISTRY = '' // e.g. 'docker.io/yourusername' — leave empty for local
     }
 
     stages {
@@ -17,8 +16,12 @@ pipeline {
         // ─────────────────────────────────────────
         stage('Checkout') {
             steps {
-                echo '📥 Checking out source code...'
-                checkout scm
+                echo '📥 Checking out source code from GitHub...'
+                git(
+                    url: 'https://github.com/your-username/my-nodejs-app-repo.git',
+                    branch: 'main',
+                    credentialsId: 'github-credentials'  // ← ID you set in Jenkins
+                )
             }
         }
 
